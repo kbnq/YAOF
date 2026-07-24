@@ -28,13 +28,12 @@ on:
         type: boolean
         default: false
       build_firmware:
-        description: "Build and publish firmware"
+        description: "Build firmware and upload artifact"
         required: false
         type: boolean
         default: true
 permissions:
-  contents: write
-  actions: write
+  contents: read
 jobs:
   setup:
     runs-on: ubuntu-24.04
@@ -270,26 +269,16 @@ jobs:
           zip ${{ env.artifact_prefix }}-$(date +%Y-%m-%d)-${{ env.latest_release }}-ext4.zip ${{ env.ext4_zip }}
           zip ${{ env.artifact_prefix }}-$(date +%Y-%m-%d)-${{ env.latest_release }}-sfs.zip ${{ env.sfs_zip }}
           ls -Ahl
-      - name: Create release
+      - name: Upload firmware artifact
         if: inputs.build_firmware
-        id: create_release
-        uses: ncipollo/release-action@main
+        uses: actions/upload-artifact@v4
         with:
-          name: OpenWRT-${{ env.latest_release }}
-          allowUpdates: true
-          prerelease: false
-          tag: ${{ env.latest_release }}
-          commit: "25.12"
-          replacesArtifacts: true
-          token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts: ./artifact/*.zip
+          name: ${{ env.artifact_prefix }}-${{ github.run_id }}
+          path: |
+            ./artifact/*.zip
+            ./artifact/*.sha256sum
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
       - name: Print Disk Space After
         run: df -h
-      - name: Trigger badge sync for current platform
-        if: github.workflow == 'OpenWrt-Matrix' && inputs.build_firmware && steps.create_release.outcome != 'skipped' && always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Triggering badge sync for ${{ matrix.name }} with status: ${{ steps.create_release.outcome }}"
-          gh workflow run "${{ matrix.name }}-OpenWrt.yml" \
-            --field badge_status="${{ steps.create_release.outcome }}" || echo "Failed to trigger ${{ matrix.name }} workflow"
