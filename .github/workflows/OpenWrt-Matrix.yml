@@ -1,6 +1,5 @@
 # Reusable workflow for building OpenWrt firmware
 name: OpenWrt-Matrix
-
 on:
   workflow_call:
     inputs:
@@ -16,7 +15,6 @@ on:
         required: false
         type: boolean
         default: true
-
   workflow_dispatch:
     inputs:
       targets:
@@ -34,7 +32,9 @@ on:
         required: false
         type: boolean
         default: true
-
+permissions:
+  contents: write
+  actions: write
 jobs:
   setup:
     runs-on: ubuntu-24.04
@@ -51,12 +51,10 @@ jobs:
             {"name": "R4S", "script_dir": "R4S", "arch": "rockchip/armv8", "arch_suffix": "3399"},
             {"name": "X86", "script_dir": "X86", "arch": "x86/64", "arch_suffix": ""}
           ]'
-
           # User selected targets
           inputs_targets="${{ inputs.targets }}"
           # Replace Chinese comma with English comma, convert to uppercase
           inputs_targets=$(echo "$inputs_targets" | sed 's/，/,/g' | tr 'a-z' 'A-Z' | xargs)
-
           if [[ -z "$inputs_targets" ]]; then
             # If input is empty, run all targets
             echo "matrix=$(echo "$all_targets" | jq -c '{include: .}')" >> $GITHUB_OUTPUT
@@ -67,7 +65,6 @@ jobs:
           fi
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-
   build:
     needs: setup
     env: # default values, will be overridden later
@@ -80,7 +77,6 @@ jobs:
       openwrt_source_name: dummy
       TARGET_DEVICE_ARCH: dummy
       latest_release: dummy
-
     runs-on: ubuntu-24.04
     if: github.event.repository.owner.id == github.event.sender.id
     strategy:
@@ -99,19 +95,14 @@ jobs:
           echo "matrix.arch: '${{ matrix.arch }}'"
           echo "matrix.arch_suffix: '${{ matrix.arch_suffix }}'"
           echo "github.run_id: '${{ github.run_id }}'"
-
           # Platform name in lowercase
           name_lower=$(echo "${{ matrix.name }}" | tr 'A-Z' 'a-z')
-
           # seed rule
           seed="${{ matrix.name }}"
-
           # artifact_prefix rule
           artifact_prefix="${{ matrix.name }}-GC404"
-
           # sha_match rule
           sha_match="$name_lower"
-
           # ext4_zip/sfs_zip rule
           if [ "$name_lower" = "x86" ]; then
             ext4_zip='*ext4-combined*'
@@ -122,13 +113,10 @@ jobs:
             sfs_zip="*$name_lower*squashfs*"
             sysupgrade_glob='*sysupgrade.img*'
           fi
-
           # workerid variable
           workerid=${{ github.run_id }}
-
           # openwrt_source_name archive name
           openwrt_source_name="openwrt-source-${{ matrix.name }}-${workerid}.tar"
-
           cat <<EOF | tee -a $GITHUB_ENV
           seed=$seed
           artifact_prefix=$artifact_prefix
@@ -138,12 +126,10 @@ jobs:
           sysupgrade_glob=$sysupgrade_glob
           openwrt_source_name=$openwrt_source_name
           EOF
-
       - name: Show system info
         run: |
           echo -e "Total CPU cores\t: $(nproc)"
           cat /proc/cpuinfo | grep 'model name'
-
       - name: Maximize build space
         if: inputs.build_firmware
         uses: smallprogram/maximize-build-space@master
@@ -155,10 +141,8 @@ jobs:
           remove-android: "true"
           remove-haskell: "true"
           remove-codeql: "true"
-
       - name: Checkout
         uses: actions/checkout@main
-
       - name: Init build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -176,14 +160,12 @@ jobs:
           sudo -E git config --global user.name 'GitHub Actions' && git config --global user.email 'noreply@github.com'
           sudo -E git config --global core.abbrev auto
           df -h
-
       - name: Prepare Mixedwrt
         run: |
           sudo chown -R runner:runner /home/runner/work/YAOF
           cp -r ./SCRIPTS/${{ matrix.script_dir }}/. ./SCRIPTS/
           cp -r ./SCRIPTS/. ./
           /bin/bash 01_get_ready.sh
-
       - name: Prepare Package
         working-directory: ${{ github.workspace }}/openwrt
         run: |
@@ -191,12 +173,10 @@ jobs:
           /bin/bash 02_prepare_package.sh
           /bin/bash 02_target_only.sh
           /bin/bash 04_remove_upx.sh
-
       - name: QTMDFW4
         working-directory: ${{ github.workspace }}/openwrt
         run: |
           cp -rf ../SEED/${{ env.seed }}/config.seed .config
-
       - name: Convert Translation
         working-directory: ${{ github.workspace }}/openwrt
         run: |
@@ -210,12 +190,10 @@ jobs:
         run: |
           sudo -E chmod -R 755 ./08_fix_permissions.sh
           /bin/bash 08_fix_permissions.sh
-
       - name: Make Config
         working-directory: ${{ github.workspace }}/openwrt
         run: |
           make defconfig
-
       - name: Get Architecture
         id: getarch
         working-directory: ${{ github.workspace }}/openwrt
@@ -227,14 +205,12 @@ jobs:
           echo "TARGET_DEVICE_ARCH=$TARGET_DEVICE_ARCH" >> $GITHUB_ENV
           latest_release="$(curl -s https://github.com/openwrt/openwrt/tags | grep -Eo "v[0-9\.]+\-*r*c*[0-9]*.tar.gz" | sed -n '/[2-9][5-9]/p' | sed -n 1p | sed 's/.tar.gz//g' | sed 's/v//g')"
           echo "latest_release=${latest_release}" >> $GITHUB_ENV
-
           echo "Package folder ${{ env.openwrt_source_name }}"
           cd ..
           # Must use tar, otherwise symbolic links will be incomplete
           if [ "${{ inputs.upload_source }}" = "true" ]; then
             tar -cf ${{ env.openwrt_source_name }} openwrt
           fi
-
       # upload_source
       - name: Upload Source Archive
         if: inputs.upload_source
@@ -244,7 +220,6 @@ jobs:
           path: |
             ${{ env.openwrt_source_name }}
           retention-days: 5
-
       - name: Cache
         if: inputs.build_firmware
         uses: HiGarfield/cachewrtbuild@main
@@ -252,7 +227,6 @@ jobs:
           mixkey: ${{ env.TARGET_DEVICE_ARCH }}
           prefix: ${{ github.workspace }}/openwrt
           skip_saving: ${{ !inputs.build_firmware }}
-
       - name: Make Download
         if: inputs.build_firmware
         working-directory: ${{ github.workspace }}/openwrt
@@ -262,7 +236,6 @@ jobs:
           fi
           make download -j50
           make -j$(($(nproc) + 1)) package/network/utils/nftables/refresh V=s
-
       # build_firmware
       - name: Compile Openwrt
         if: inputs.build_firmware
@@ -279,7 +252,6 @@ jobs:
           cat ./.config
           echo '================================================================'
           make -j1 V=s
-
       - name: Organize files
         if: inputs.build_firmware
         id: organize
@@ -298,7 +270,6 @@ jobs:
           zip ${{ env.artifact_prefix }}-$(date +%Y-%m-%d)-${{ env.latest_release }}-ext4.zip ${{ env.ext4_zip }}
           zip ${{ env.artifact_prefix }}-$(date +%Y-%m-%d)-${{ env.latest_release }}-sfs.zip ${{ env.sfs_zip }}
           ls -Ahl
-
       - name: Create release
         if: inputs.build_firmware
         id: create_release
@@ -312,10 +283,8 @@ jobs:
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: ./artifact/*.zip
-
       - name: Print Disk Space After
         run: df -h
-
       - name: Trigger badge sync for current platform
         if: github.workflow == 'OpenWrt-Matrix' && inputs.build_firmware && steps.create_release.outcome != 'skipped' && always()
         env:
